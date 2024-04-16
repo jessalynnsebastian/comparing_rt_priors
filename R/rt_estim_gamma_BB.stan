@@ -1,7 +1,9 @@
-//current state of the art model as of 1/13/2022
 //gamma model of incidence
 //exponential seeded incidence
 //observations as nb with mean as function of tests
+//log-scale brownian bridge prior on Rt
+//lognormal hyperprior on sigma
+//lognormal hyperpriors on initial and final "pinned" points a and b
 functions{
  vector my_reverse(vector v) {
    int num = rows(v);
@@ -34,6 +36,9 @@ data {
   real log_sigma_mu;
   real log_sigma_sd;
   
+  real log_b_mu;
+  real log_b_sd;
+  
   real log_rho_mu;
   real log_rho_sd;
   
@@ -47,8 +52,7 @@ data {
 
 // The parameters accepted by the model.
 parameters {
-  real log_rt0_raw; //initial log r0
-  vector[n-1] diff_rt; //vector of changes in log_rt for each time point
+  vector [n] z; // unscaled log_rt prior 
   real log_incid_rate_raw; // standard deviation for incidence
   real<lower=0> seed_incid_raw[prev_vals];
   real log_sigma; //variance on random walk parameter
@@ -56,13 +60,9 @@ parameters {
   real<lower=0> i_raw[n]; //incidence transformed so that the mean is always 1
   real<lower = 0> kappa;  // overdispersion parameter for cases
   real<lower=0> exp_rate;
-
-
-  
-}
+  }
 
 transformed parameters{
-  vector[n] log_rt;
   real<lower=0> sigma = exp(log_sigma_mu + log_sigma_sd*log_sigma);
   real<lower=0> incid_rate = exp(log_incid_rate_raw*log_incid_rate_sd + 
                                  log_incid_rate_mean);
@@ -72,7 +72,7 @@ transformed parameters{
   real <lower=0> delay_sum[n];
   vector<lower=0>[prev_vals+n] aug_incid;
   real <lower=0> rho = exp(log_rho*log_rho_sd + log_rho_mu);
-
+  vector[n] log_rt; // scale to brownian bridge prior
 
   //seed incid
   for (i in 1:prev_vals){
@@ -80,17 +80,18 @@ transformed parameters{
   }
 
 
-  //first entry should just be initial log_rt
-  log_rt[1] = log_r0_mu+log_r0_sd*log_rt0_raw;
-  
-
-  //next entry should be previous log_rt plus the scaled difference
-  for (r in 2:n){
-  
-  log_rt[r] = log_rt[r-1] + diff_rt[r-1]*inv_sqrt(n) * sigma;
-  } 
-  
-
+  // brownian bridge prior
+  log_rt[1] = log_r0_mu + log_r0_sd*z[1];
+  log_rt[n] = log_b_mu + z[n]*log_b_sd;
+  for (r in 2:(n-1)) {
+    // bb conditional mean: a - (a-b)((t+s)/T) - ((T-t-s)/(T-s))(Bs - a + (a-b)(s/T)
+    // bb conditional variance: (1/T)( (t+s)(T-t-s) + s(T-t-s)^2/(T-s) )
+    // s is some prior time we are conditioning on knowledge of, t is the time that has passed since time s, T is total time
+    // so here, s is r-1, t is 1, T is n
+    // log_rt[r] = mean + (normal 0,1)*sd
+    log_rt[r] = (log_rt[1] - (log_rt[1]-log_rt[n])*((r)/n) - ((n-r)/(n-r+1))*(log_rt[r-1] - log_rt[1] + (log_rt[1]-log_rt[n])*((r-1)/n))) + z[r]*sqrt((sigma^2/n)*((r)*(n-r) + (r-1)*(n-r)^2/(n-r+1)));
+    
+  }
   
   //putting incidence fully into latent land
   //starting with aug_incid first 8 values being the seed_incids
@@ -162,8 +163,6 @@ model {
   // prior on random walk sigma
   log_sigma ~ normal(0,1);
 
-  //priors for log R0
-  log_rt0_raw ~ normal(0, 1);
   //prior on sd of incidence
   log_incid_rate_raw ~ normal(0, 1);
   
@@ -174,13 +173,12 @@ model {
       seed_incid_raw[i] ~ exponential(1);
 
   }
-
-  //unscaled difference in rts
-  for (r in 1:n-1) {
-    diff_rt[r] ~ normal(0, 1);
+  
+  // unscaled brownian bridge prior
+  for (r in 1:n) {
+    z[r] ~ normal(0, 1);
     
   }
-  
 
   //raw incidence modeled in terms of previous true incidence and seed incidence
   for (t in 1:n) {
@@ -201,12 +199,12 @@ model {
 
 }
 
-generated quantities{
-  int gen_obs[n];
-  for (t in 1:n) {
-      gen_obs[t] = neg_binomial_2_rng(rho*test[t]*delay_sum[t], kappa);
-  }
-
-}
+// generated quantities{
+//   int gen_obs[n];
+//   for (t in 1:n) {
+//       gen_obs[t] = neg_binomial_2_rng(rho*test[t]*delay_sum[t], kappa);
+//   }
+// 
+// }
 
 
