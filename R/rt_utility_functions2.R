@@ -1088,7 +1088,17 @@ make_prior <- function(exp_rate_lambda = 0.3,
                          num_samples = 4000,
                          kappa_mu = 200, 
                          kappa_sd = 100, 
-                         kappa = FALSE) {
+                         kappa = FALSE,
+                         OU = FALSE,
+                         theta_mu = 1,
+                         log_delta_mu = -.6,
+                         log_delta_sd = .6,
+                         mu_mu = 0,
+                         mu_sd = 1,
+                         IBM = FALSE,
+                         BB = FALSE,
+                         log_b_mu = -2,
+                         log_b_sd = 0.05) {
   
   if (kappa == FALSE) {
     sqrt_kappa_inv <- rtruncnorm(num_samples, a = 0, 
@@ -1098,12 +1108,29 @@ make_prior <- function(exp_rate_lambda = 0.3,
     kappa <- (1/sqrt_kappa_inv)^2
     sigma <- exp(rnorm(num_samples, log_sigma_mu, log_sigma_sd))
     incid_rate <- exp(rnorm(num_samples, log_incid_rate_mean, log_incid_rate_sd))
-    exp_rate <- rexp(num_samples, 0.3)
+    exp_rate <- rexp(num_samples, exp_rate_lambda)
         rho <- exp(rnorm(num_samples, log_rho_mu, log_rho_sd))
-    
-    priors <- data.frame(kappa, sqrt_kappa_inv, sigma, incid_rate, mu0, rho, r0) %>%
-      pivot_longer(everything(), names_to = ".variable", values_to = ".value") %>%
-      mutate(type = "prior")
+    if (OU == TRUE){
+      theta <- rexp(num_samples, 1/theta_mu)
+      delta <- exp(rnorm(num_samples, log_delta_mu, log_delta_sd))
+      mu <- rnorm(num_samples, mu_mu, mu_sd)
+      
+      priors <- data.frame(kappa, sqrt_kappa_inv, delta, theta, mu, incid_rate, mu0, rho, r0) %>%
+        pivot_longer(everything(), names_to = ".variable", values_to = ".value") %>%
+        mutate(type = "prior")
+    }
+    if (BB == TRUE){
+      b <- exp(rnorm(num_samples, log_b_mu, log_b_sd))
+      
+      priors <- data.frame(kappa, sqrt_kappa_inv, sigma, b, incid_rate, mu0, rho, r0) %>%
+        pivot_longer(everything(), names_to = ".variable", values_to = ".value") %>%
+        mutate(type = "prior")
+    }
+    else {
+      priors <- data.frame(kappa, sqrt_kappa_inv, sigma, incid_rate, mu0, rho, r0) %>%
+        pivot_longer(everything(), names_to = ".variable", values_to = ".value") %>%
+        mutate(type = "prior")
+    }
     
     
   }
@@ -1115,12 +1142,32 @@ make_prior <- function(exp_rate_lambda = 0.3,
     r0 <- exp(rnorm(num_samples, log_r0_mu, log_r0_sd))
     sigma <- exp(rnorm(num_samples, log_sigma_mu, log_sigma_sd))
     incid_rate <- exp(rnorm(num_samples, log_incid_rate_mean, log_incid_rate_sd))
-    exp_rate <- rexp(num_samples, 0.3)
+    exp_rate <- rexp(num_samples, exp_rate_lambda)
     rho <- exp(rnorm(num_samples, log_rho_mu, log_rho_sd))
     
-    priors <- data.frame(kappa, sigma, incid_rate, exp_rate, rho, r0) %>%
-      pivot_longer(everything(), names_to = ".variable", values_to = ".value") %>%
-      mutate(type = "prior")
+    if (OU == TRUE){
+      theta <- rexp(num_samples, 1/theta_mu)
+      delta <- exp(rnorm(num_samples, log_delta_mu, log_delta_sd))
+      mu <- rnorm(num_samples, mu_mu, mu_sd)
+      
+      priors <- data.frame(kappa, delta, theta, mu, incid_rate, exp_rate, rho, r0) %>%
+        pivot_longer(everything(), names_to = ".variable", values_to = ".value") %>%
+        mutate(type = "prior")
+    }
+    if (BB == TRUE){
+      b <- exp(rnorm(num_samples, log_b_mu, log_b_sd))
+      
+      priors <- data.frame(kappa, sigma, b, incid_rate, exp_rate, rho, r0) %>%
+        pivot_longer(everything(), names_to = ".variable", values_to = ".value") %>%
+        mutate(type = "prior")
+    }
+    else {
+      priors <- data.frame(kappa, sigma, incid_rate, exp_rate, rho, r0) %>%
+        pivot_longer(everything(), names_to = ".variable", values_to = ".value") %>%
+        mutate(type = "prior")
+    }
+    
+    
   }
 
   
